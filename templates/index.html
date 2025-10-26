@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Sync - Copy & Paste with Hand Gestures</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            padding: 1rem 2rem;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .header h1 {
+            color: white;
+            font-size: 2rem;
+            font-weight: 300;
+            text-align: center;
+        }
+
+        .main-container {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+            padding: 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 1.5rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .video-panel {
+            grid-column: 1 / -1;
+            text-align: center;
+        }
+
+        .video-container {
+            position: relative;
+            display: inline-block;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+
+        #video-feed {
+            width: 640px;
+            height: 480px;
+            object-fit: cover;
+        }
+
+        .gesture-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+
+        .status-panel h2, .peers-panel h2, .settings-panel h2 {
+            color: #4a5568;
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+            border-bottom: 2px solid #e2e8f0;
+            padding-bottom: 0.5rem;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            font-weight: 500;
+            color: #4a5568;
+        }
+
+        .status-value {
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .status-connected {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-disconnected {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .status-running {
+            background: #bee3f8;
+            color: #2a4365;
+        }
+
+        .peer-list {
+            max-height: 200px;
+            overflow-y: auto;
+        }
+
+        .peer-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem;
+            background: #f7fafc;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            border: 1px solid #e2e8f0;
+        }
+
+        .peer-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .peer-name {
+            font-weight: 500;
+            color: #2d3748;
+        }
+
+        .peer-address {
+            font-size: 0.85rem;
+            color: #718096;
+        }
+
+        .connect-btn {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 0.5rem 1rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .connect-btn:hover {
+            background: #3182ce;
+        }
+
+        .connect-btn:disabled {
+            background: #a0aec0;
+            cursor: not-allowed;
+        }
+
+        .manual-connect {
+            display: flex;
+            gap: 0.5rem;
+            margin-top: 1rem;
+        }
+
+        .manual-connect input {
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+
+        .settings-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .settings-group h3 {
+            color: #4a5568;
+            margin-bottom: 0.5rem;
+            font-size: 1rem;
+        }
+
+        .setting-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .setting-label {
+            font-size: 0.9rem;
+            color: #4a5568;
+        }
+
+        .setting-control {
+            padding: 0.25rem 0.5rem;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .log-container {
+            background: #1a202c;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 8px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
+        .log-entry {
+            margin-bottom: 0.25rem;
+            padding: 0.25rem 0;
+        }
+
+        .log-timestamp {
+            color: #718096;
+        }
+
+        .log-info {
+            color: #63b3ed;
+        }
+
+        .log-success {
+            color: #68d391;
+        }
+
+        .log-error {
+            color: #fc8181;
+        }
+
+        .gesture-instructions {
+            background: #f0fff4;
+            border: 1px solid #9ae6b4;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-top: 1rem;
+        }
+
+        .gesture-instructions h3 {
+            color: #22543d;
+            margin-bottom: 0.5rem;
+        }
+
+        .gesture-instructions ul {
+            list-style: none;
+            padding-left: 0;
+        }
+
+        .gesture-instructions li {
+            padding: 0.25rem 0;
+            color: #2f855a;
+        }
+
+        .gesture-instructions li:before {
+            content: "👋 ";
+            margin-right: 0.5rem;
+        }
+
+        @media (max-width: 768px) {
+            .main-container {
+                grid-template-columns: 1fr;
+                padding: 1rem;
+            }
+            
+            #video-feed {
+                width: 100%;
+                max-width: 640px;
+                height: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎯 Gesture Sync</h1>
+    </div>
+
+    <div class="main-container">
+        <div class="panel video-panel">
+            <div class="video-container">
+                <img id="video-feed" src="/video_feed" alt="Video Feed">
+                <div class="gesture-overlay" id="gesture-overlay" style="display: none;">
+                    <div id="gesture-text">No gesture detected</div>
+                    <div id="gesture-progress" style="margin-top: 5px;"></div>
+                </div>
+            </div>
+            
+            <div class="gesture-instructions">
+                <h3>Gesture Instructions</h3>
+                <ul>
+                    <li><strong>Copy:</strong> Peace sign (index + middle finger up, others down)</li>
+                    <li><strong>Paste:</strong> Open hand (all fingers extended)</li>
+                    <li><strong>Select All:</strong> Fist (all fingers folded)</li>
+                    <li><strong>Cursor:</strong> Pointing (only index finger up)</li>
+                    <li><strong>Select:</strong> OK sign (index + thumb up, others down)</li>
+                    <li>Hold gesture for 1 second to trigger action</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="panel status-panel">
+            <h2>📊 Status</h2>
+            <div class="status-item">
+                <span class="status-label">Application Status</span>
+                <span class="status-value status-running" id="app-status">Running</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">WebSocket Server</span>
+                <span class="status-value" id="ws-server-status">Unknown</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Peer Connection</span>
+                <span class="status-value" id="peer-status">Disconnected</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Local IP</span>
+                <span class="status-value" id="local-ip">{{ local_ip }}</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Connected Peers</span>
+                <span class="status-value" id="peer-count">0</span>
+            </div>
+        </div>
+
+        <div class="panel peers-panel">
+            <h2>🔗 Discovered Peers</h2>
+            <div class="peer-list" id="peer-list">
+                <div style="text-align: center; color: #718096; padding: 2rem;">
+                    Scanning for peers...
+                </div>
+            </div>
+            
+            <div class="manual-connect">
+                <input type="text" id="peer-host" placeholder="Enter peer IP address">
+                <button class="connect-btn" onclick="connectToPeer()">Connect</button>
+            </div>
+        </div>
+
+        <div class="panel settings-panel">
+            <h2>⚙️ Settings</h2>
+            
+            <div class="settings-group">
+                <h3>Gesture Sensitivity</h3>
+                <div class="setting-item">
+                    <span class="setting-label">Detection Confidence</span>
+                    <input type="range" class="setting-control" id="sensitivity" min="0.5" max="0.9" step="0.1" value="0.7">
+                </div>
+                <div class="setting-item">
+                    <span class="setting-label">Hold Duration (seconds)</span>
+                    <input type="range" class="setting-control" id="hold-duration" min="0.5" max="3.0" step="0.1" value="1.0">
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <h3>Display Options</h3>
+                <div class="setting-item">
+                    <span class="setting-label">Show Gesture Overlay</span>
+                    <input type="checkbox" class="setting-control" id="show-overlay" checked>
+                </div>
+                <div class="setting-item">
+                    <span class="setting-label">Show Video Feed</span>
+                    <input type="checkbox" class="setting-control" id="show-video" checked>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel" style="grid-column: 1 / -1;">
+            <h2>📝 Activity Log</h2>
+            <div class="log-container" id="log-container">
+                <div class="log-entry">
+                    <span class="log-timestamp">[00:00:00]</span>
+                    <span class="log-info">Application started</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let statusUpdateInterval = null;
+
+        // Initialize WebSocket connection
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                addLogEntry('WebSocket connection established', 'success');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (e) {
+                    addLogEntry('Invalid WebSocket message received', 'error');
+                }
+            };
+            
+            ws.onclose = function(event) {
+                addLogEntry('WebSocket connection closed', 'error');
+                // Attempt to reconnect after 3 seconds
+                setTimeout(initWebSocket, 3000);
+            };
+            
+            ws.onerror = function(error) {
+                addLogEntry('WebSocket error: ' + error, 'error');
+            };
+        }
+
+        // Handle WebSocket messages
+        function handleWebSocketMessage(data) {
+            if (data.type === 'gesture_detected') {
+                updateGestureOverlay(data.gesture, data.progress);
+            } else if (data.type === 'clipboard_sync') {
+                addLogEntry(`Clipboard synced: ${data.content.substring(0, 50)}...`, 'info');
+            } else if (data.type === 'connection_established') {
+                addLogEntry(`Connected to peer: ${data.client_id}`, 'success');
+            }
+        }
+
+        // Update gesture overlay
+        function updateGestureOverlay(gesture, progress) {
+            const overlay = document.getElementById('gesture-overlay');
+            const gestureText = document.getElementById('gesture-text');
+            const progressBar = document.getElementById('gesture-progress');
+            
+            if (gesture) {
+                overlay.style.display = 'block';
+                gestureText.textContent = `${gesture.toUpperCase()} detected`;
+                
+                if (progress !== undefined) {
+                    const progressPercent = Math.round(progress * 100);
+                    progressBar.innerHTML = `
+                        <div style="background: #e2e8f0; height: 4px; border-radius: 2px; overflow: hidden;">
+                            <div style="background: ${progress >= 1 ? '#68d391' : '#63b3ed'}; height: 100%; width: ${progressPercent}%; transition: width 0.3s;"></div>
+                        </div>
+                        <div style="font-size: 0.8rem; margin-top: 2px;">${progressPercent}%</div>
+                    `;
+                }
+            } else {
+                overlay.style.display = 'none';
+            }
+        }
+
+        // Connect to peer
+        async function connectToPeer() {
+            const host = document.getElementById('peer-host').value.trim();
+            if (!host) {
+                addLogEntry('Please enter a peer IP address', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/connect', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        host: host,
+                        port: 8001
+                    })
+                });
+
+                const result = await response.json();
+                if (result.status === 'success') {
+                    addLogEntry(result.message, 'success');
+                } else {
+                    addLogEntry(result.message, 'error');
+                }
+            } catch (error) {
+                addLogEntry('Failed to connect to peer: ' + error, 'error');
+            }
+        }
+
+        // Update status
+        async function updateStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                
+                document.getElementById('ws-server-status').textContent = status.ws_server_running ? 'Running' : 'Stopped';
+                document.getElementById('ws-server-status').className = `status-value ${status.ws_server_running ? 'status-connected' : 'status-disconnected'}`;
+                
+                document.getElementById('peer-status').textContent = status.ws_client_connected ? 'Connected' : 'Disconnected';
+                document.getElementById('peer-status').className = `status-value ${status.ws_client_connected ? 'status-connected' : 'status-disconnected'}`;
+                
+                document.getElementById('peer-count').textContent = status.connected_peers;
+            } catch (error) {
+                console.error('Failed to update status:', error);
+            }
+        }
+
+        // Update peer list
+        async function updatePeerList() {
+            try {
+                const response = await fetch('/api/peers');
+                const data = await response.json();
+                const peerList = document.getElementById('peer-list');
+                
+                if (data.peers.length === 0) {
+                    peerList.innerHTML = '<div style="text-align: center; color: #718096; padding: 2rem;">No peers discovered</div>';
+                } else {
+                    peerList.innerHTML = data.peers.map(peer => `
+                        <div class="peer-item">
+                            <div class="peer-info">
+                                <div class="peer-name">${peer.hostname}</div>
+                                <div class="peer-address">${peer.ip}:${peer.port}</div>
+                            </div>
+                            <button class="connect-btn" onclick="connectToPeer('${peer.ip}', ${peer.port})">
+                                Connect
+                            </button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Failed to update peer list:', error);
+            }
+        }
+
+        // Add log entry
+        function addLogEntry(message, type = 'info') {
+            const logContainer = document.getElementById('log-container');
+            const timestamp = new Date().toLocaleTimeString();
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `log-entry log-${type}`;
+            logEntry.innerHTML = `
+                <span class="log-timestamp">[${timestamp}]</span>
+                <span class="log-${type}">${message}</span>
+            `;
+            
+            logContainer.appendChild(logEntry);
+            logContainer.scrollTop = logContainer.scrollHeight;
+            
+            // Keep only last 100 entries
+            while (logContainer.children.length > 100) {
+                logContainer.removeChild(logContainer.firstChild);
+            }
+        }
+
+        // Initialize application
+        function init() {
+            initWebSocket();
+            updateStatus();
+            updatePeerList();
+            
+            // Update status every 2 seconds
+            statusUpdateInterval = setInterval(() => {
+                updateStatus();
+                updatePeerList();
+            }, 2000);
+            
+            addLogEntry('Gesture Sync application initialized', 'success');
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+            if (statusUpdateInterval) {
+                clearInterval(statusUpdateInterval);
+            }
+        });
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
