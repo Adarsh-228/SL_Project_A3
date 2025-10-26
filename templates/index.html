@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Gesture Sync Status</title>
+</head>
+<body>
+<h1>Gesture Sync System</h1>
+<p id="status">Waiting for messages...</p>
+
+<script>
+    const status = document.getElementById('status');
+    const ws = new WebSocket("ws://localhost:8000/ws");
+    ws.onopen = () => { status.textContent = "✅ Connected to server"; };
+    ws.onmessage = (msg) => { status.textContent = "📩 Received: " + msg.data; };
+</script>
+</body>
+</html>

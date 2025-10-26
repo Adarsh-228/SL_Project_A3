@@ -1,5 +1,5 @@
 {
-  "self_host": "10.88.146.156",
+  "self_host": "0.0.0.0",
   "self_port": 8000,
   "peer_host": "10.196.92.215",
   "peer_port": 8000
