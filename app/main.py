@@ -65,6 +65,7 @@ def get_camera():
             camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
             camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
             camera.set(cv2.CAP_PROP_FPS, 30)
+            camera.set(cv2.CAP_PROP_BUFFERSIZE, 1)  # Reduce buffer to minimize delay
             
             if not camera.isOpened():
                 logger.error("ERROR: Could not open camera")
@@ -77,6 +78,12 @@ def get_camera():
                 camera.release()
                 camera = None
                 return None
+            
+            # Read a few more frames to warm up the camera
+            for i in range(3):
+                ret, _ = camera.read()
+                if not ret:
+                    logger.warning(f"WARNING: Frame {i+1} failed during warmup")
                 
             logger.info("SUCCESS: Camera opened and tested successfully")
         except Exception as e:
@@ -89,29 +96,27 @@ def get_camera():
 
 def generate_frames():
     """Generate video frames for streaming"""
-    cap = get_camera()
-    if cap is None:
-        logger.error("ERROR: Cannot generate frames - camera not available")
+    cap = cv2.VideoCapture(0)
+    if not cap.isOpened():
+        logger.error("ERROR: Cannot open camera")
         return
     
+    # Set camera properties
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_FPS, 30)
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    
+    logger.info("SUCCESS: Camera opened for streaming")
     frame_count = 0
-    consecutive_failures = 0
-    max_consecutive_failures = 10
     
     while True:
         try:
             ret, frame = cap.read()
             if not ret or frame is None:
-                consecutive_failures += 1
-                logger.warning(f"WARNING: Failed to read frame (attempt {consecutive_failures})")
-                
-                if consecutive_failures >= max_consecutive_failures:
-                    logger.error("ERROR: Too many consecutive frame failures, stopping stream")
-                    break
+                logger.warning("WARNING: Failed to read frame")
                 continue
             
-            # Reset failure counter on successful read
-            consecutive_failures = 0
             frame_count += 1
             
             # Flip frame horizontally for mirror effect
@@ -127,21 +132,18 @@ def generate_frames():
                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
             
             # Encode frame as JPEG
-            (flag, encodedImage) = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
-            if not flag:
-                logger.warning("WARNING: Failed to encode frame as JPEG")
-                continue
-            
-            # Yield frame
-            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
-                   bytearray(encodedImage) + b'\r\n')
-                   
+            ret, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if ret:
+                frame_bytes = buffer.tobytes()
+                yield (b'--frame\r\n'
+                       b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+                       
         except Exception as e:
             logger.error(f"ERROR: Error in frame generation: {e}")
-            consecutive_failures += 1
-            if consecutive_failures >= max_consecutive_failures:
-                break
             continue
+    
+    cap.release()
+    logger.info("Camera released")
 
 @app.get("/", response_class=HTMLResponse)
 async def get_status():
@@ -183,16 +185,19 @@ async def get_status():
             
             <div class="camera-container">
                 <h3>📹 Live Camera Feed</h3>
-                <img id="cameraFeed" class="camera-feed" src="/video_feed" alt="Camera Feed">
+                <img id="cameraFeed" class="camera-feed" src="/video_feed" alt="Camera Feed" onload="cameraLoaded()" onerror="cameraError()">
                 <div>
                     <button class="btn-primary" onclick="toggleCamera()">Toggle Camera</button>
                     <button class="btn-success" onclick="testCamera()">Test Camera</button>
+                    <button class="btn-success" onclick="restartCamera()">Restart Camera</button>
                 </div>
+                <div id="cameraStatus" style="margin-top: 10px; padding: 5px; border-radius: 3px; background: #f8f9fa;"></div>
             </div>
             
             <div>
                 <button class="btn-primary" onclick="sendTestMessage()">Send Test Message</button>
                 <button class="btn-success" onclick="connectToPeer()">Connect to Peer</button>
+                <button class="btn-success" onclick="sendMessageToPeer()">Send to Peer</button>
                 <button class="btn-danger" onclick="disconnect()">Disconnect</button>
             </div>
             
@@ -224,21 +229,21 @@ async def get_status():
                 
                 ws.onopen = function(event) {
                     updateStatus('Connected to WebSocket server', 'connected');
-                    addLog('✅ WebSocket connection established');
+                    addLog('SUCCESS: WebSocket connection established');
                 };
                 
                 ws.onmessage = function(event) {
                     const data = JSON.parse(event.data);
-                    addLog(`📨 Received: ${data.type} - ${data.message || JSON.stringify(data)}`);
+                    addLog(`RECEIVED: ${data.type} - ${data.message || JSON.stringify(data)}`);
                 };
                 
                 ws.onclose = function(event) {
                     updateStatus('Disconnected from WebSocket server', 'disconnected');
-                    addLog('🔌 WebSocket connection closed');
+                    addLog('DISCONNECTED: WebSocket connection closed');
                 };
                 
                 ws.onerror = function(error) {
-                    addLog(`❌ WebSocket error: ${error}`);
+                    addLog(`ERROR: WebSocket error: ${error}`);
                 };
             }
 
@@ -263,9 +268,25 @@ async def get_status():
                         timestamp: new Date().toISOString()
                     };
                     ws.send(JSON.stringify(message));
-                    addLog('📤 Sent test message');
+                    addLog('SENT: Test message');
                 } else {
-                    addLog('❌ WebSocket not connected');
+                    addLog('ERROR: WebSocket not connected');
+                }
+            }
+
+            function sendMessageToPeer() {
+                if (window.peerConnection && window.peerConnection.readyState === WebSocket.OPEN) {
+                    const message = {
+                        type: 'peer_message',
+                        message: 'Hello from System 1!',
+                        from: 'System 1',
+                        timestamp: new Date().toISOString()
+                    };
+                    window.peerConnection.send(JSON.stringify(message));
+                    addLog('SENT: Message to peer');
+                } else {
+                    addLog('ERROR: Peer connection not established');
+                    addLog('Click "Connect to Peer" first');
                 }
             }
 
@@ -284,19 +305,83 @@ async def get_status():
             function testCamera() {
                 const feed = document.getElementById('cameraFeed');
                 feed.onload = function() {
-                    addLog('✅ Camera feed loaded successfully');
+                    addLog('SUCCESS: Camera feed loaded successfully');
+                    updateCameraStatus('Camera working', 'success');
                 };
                 feed.onerror = function() {
-                    addLog('❌ Camera feed failed to load');
+                    addLog('ERROR: Camera feed failed to load');
+                    updateCameraStatus('Camera failed', 'error');
                 };
-                addLog('🧪 Testing camera feed...');
+                addLog('Testing camera feed...');
+            }
+
+            function cameraLoaded() {
+                addLog('SUCCESS: Camera feed loaded');
+                updateCameraStatus('Camera active', 'success');
+            }
+
+            function cameraError() {
+                addLog('ERROR: Camera feed error');
+                updateCameraStatus('Camera error', 'error');
+            }
+
+            function updateCameraStatus(message, type) {
+                const statusDiv = document.getElementById('cameraStatus');
+                statusDiv.textContent = message;
+                statusDiv.style.background = type === 'success' ? '#d4edda' : '#f8d7da';
+                statusDiv.style.color = type === 'success' ? '#155724' : '#721c24';
+            }
+
+            function restartCamera() {
+                const feed = document.getElementById('cameraFeed');
+                addLog('Restarting camera...');
+                updateCameraStatus('Restarting...', 'info');
+                
+                // Force reload the video feed
+                const currentSrc = feed.src;
+                feed.src = '';
+                setTimeout(() => {
+                    feed.src = currentSrc + '?t=' + new Date().getTime();
+                }, 100);
             }
 
             function connectToPeer() {
-                peerHost = prompt('Enter peer IP address (e.g., 10.196.92.156):');
+                peerHost = prompt('Enter peer IP address (e.g., 172.19.247.215):');
                 if (peerHost) {
                     addLog(`🔌 Attempting to connect to peer: ${peerHost}`);
-                    addLog('ℹ️ Peer connection for Phase 2');
+                    
+                    // Create new WebSocket connection to peer
+                    const peerWsUrl = `ws://${peerHost}:8000/ws`;
+                    addLog(`Connecting to: ${peerWsUrl}`);
+                    
+                    try {
+                        const peerWs = new WebSocket(peerWsUrl);
+                        
+                        peerWs.onopen = function(event) {
+                            addLog(`✅ Connected to peer ${peerHost}`);
+                            addLog('You can now send messages to the peer');
+                        };
+                        
+                        peerWs.onmessage = function(event) {
+                            const data = JSON.parse(event.data);
+                            addLog(`📨 Message from peer: ${data.message || JSON.stringify(data)}`);
+                        };
+                        
+                        peerWs.onclose = function(event) {
+                            addLog(`🔌 Connection to peer ${peerHost} closed`);
+                        };
+                        
+                        peerWs.onerror = function(error) {
+                            addLog(`❌ Error connecting to peer: ${error}`);
+                            addLog('Make sure the peer server is running on port 8000');
+                        };
+                        
+                        // Store peer connection for sending messages
+                        window.peerConnection = peerWs;
+                        
+                    } catch (error) {
+                        addLog(`❌ Failed to create peer connection: ${error}`);
+                    }
                 }
             }
 
@@ -310,7 +395,13 @@ async def get_status():
             // Auto-connect on page load
             window.onload = function() {
                 connect();
-                addLog('🎥 Phase 2: Camera feed integration');
+                addLog('Phase 2: Camera feed integration');
+                
+                // Auto-start camera after a short delay
+                setTimeout(() => {
+                    addLog('Auto-starting camera...');
+                    updateCameraStatus('Starting camera...', 'info');
+                }, 1000);
             };
         </script>
     </body>
