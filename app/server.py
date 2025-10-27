@@ -1,6 +1,6 @@
 """
-Phase 1: Main Entry Point
-Combines server and client functionality
+Phase 1: WebSocket Server
+FastAPI WebSocket server for bi-directional communication
 """
 import asyncio
 import json
@@ -10,7 +10,6 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
-import websockets
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -70,18 +69,12 @@ async def get_status():
             .btn-primary { background: #007bff; color: white; }
             .btn-success { background: #28a745; color: white; }
             .btn-danger { background: #dc3545; color: white; }
-            .phase-info { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; }
         </style>
     </head>
     <body>
         <div class="container">
             <h1>🎯 Gesture Sync - Phase 1</h1>
-            
-            <div class="phase-info">
-                <h3>Phase 1: WebSocket Connectivity</h3>
-                <p><strong>Goal:</strong> Ensure both PCs can communicate over WebSocket</p>
-                <p><strong>Status:</strong> Server running, waiting for connections</p>
-            </div>
+            <h2>WebSocket Server Status</h2>
             
             <div id="status" class="status disconnected">
                 Server Running - Waiting for connections
@@ -99,16 +92,6 @@ async def get_status():
             <h3>Manual Test</h3>
             <input type="text" id="messageInput" placeholder="Enter test message" style="width: 300px; padding: 8px;">
             <button class="btn-primary" onclick="sendCustomMessage()">Send</button>
-            
-            <div class="phase-info">
-                <h4>Next Steps:</h4>
-                <ol>
-                    <li>Start this server on both PCs</li>
-                    <li>Use "Connect to Peer" to connect PC-B to PC-A</li>
-                    <li>Test bi-directional messaging</li>
-                    <li>Move to Phase 2 (Camera feed)</li>
-                </ol>
-            </div>
         </div>
 
         <script>
@@ -191,7 +174,9 @@ async def get_status():
                 peerHost = prompt('Enter peer IP address (e.g., 192.168.1.100):');
                 if (peerHost) {
                     addLog(`🔌 Attempting to connect to peer: ${peerHost}`);
-                    addLog('ℹ️ Peer connection will be implemented in Phase 1 completion');
+                    // This would connect to peer's WebSocket server
+                    // For now, just log the attempt
+                    addLog('ℹ️ Peer connection not implemented yet - Phase 1 focuses on server');
                 }
             }
 

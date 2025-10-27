@@ -1,17 +1,154 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Gesture Sync Status</title>
+    <title>Gesture Sync - Phase 1</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; background: #f0f0f0; }
+        .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background: #d4edda; color: #155724; }
+        .disconnected { background: #f8d7da; color: #721c24; }
+        .log { background: #f8f9fa; border: 1px solid #dee2e6; padding: 15px; height: 300px; overflow-y: auto; font-family: monospace; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-primary { background: #007bff; color: white; }
+        .btn-success { background: #28a745; color: white; }
+        .btn-danger { background: #dc3545; color: white; }
+        .phase-info { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; }
+    </style>
 </head>
 <body>
-<h1>Gesture Sync System</h1>
-<p id="status">Waiting for messages...</p>
+    <div class="container">
+        <h1>🎯 Gesture Sync - Phase 1</h1>
+        
+        <div class="phase-info">
+            <h3>Phase 1: WebSocket Connectivity</h3>
+            <p><strong>Goal:</strong> Ensure both PCs can communicate over WebSocket</p>
+            <p><strong>Status:</strong> Server running, waiting for connections</p>
+        </div>
+        
+        <div id="status" class="status disconnected">
+            Server Running - Waiting for connections
+        </div>
+        
+        <div>
+            <button class="btn-primary" onclick="sendTestMessage()">Send Test Message</button>
+            <button class="btn-success" onclick="connectToPeer()">Connect to Peer</button>
+            <button class="btn-danger" onclick="disconnect()">Disconnect</button>
+        </div>
+        
+        <h3>Connection Log</h3>
+        <div id="log" class="log"></div>
+        
+        <h3>Manual Test</h3>
+        <input type="text" id="messageInput" placeholder="Enter test message" style="width: 300px; padding: 8px;">
+        <button class="btn-primary" onclick="sendCustomMessage()">Send</button>
+        
+        <div class="phase-info">
+            <h4>Next Steps:</h4>
+            <ol>
+                <li>Start this server on both PCs</li>
+                <li>Use "Connect to Peer" to connect PC-B to PC-A</li>
+                <li>Test bi-directional messaging</li>
+                <li>Move to Phase 2 (Camera feed)</li>
+            </ol>
+        </div>
+    </div>
 
-<script>
-    const status = document.getElementById('status');
-    const ws = new WebSocket("ws://localhost:8000/ws");
-    ws.onopen = () => { status.textContent = "✅ Connected to server"; };
-    ws.onmessage = (msg) => { status.textContent = "📩 Received: " + msg.data; };
-</script>
+    <script>
+        let ws = null;
+        let peerHost = null;
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                updateStatus('Connected to WebSocket server', 'connected');
+                addLog('✅ WebSocket connection established');
+            };
+            
+            ws.onmessage = function(event) {
+                const data = JSON.parse(event.data);
+                addLog(`📨 Received: ${data.type} - ${data.message || JSON.stringify(data)}`);
+            };
+            
+            ws.onclose = function(event) {
+                updateStatus('Disconnected from WebSocket server', 'disconnected');
+                addLog('🔌 WebSocket connection closed');
+            };
+            
+            ws.onerror = function(error) {
+                addLog(`❌ WebSocket error: ${error}`);
+            };
+        }
+
+        function updateStatus(message, type) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        }
+
+        function addLog(message) {
+            const logDiv = document.getElementById('log');
+            const timestamp = new Date().toLocaleTimeString();
+            logDiv.innerHTML += `[${timestamp}] ${message}<br>`;
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function sendTestMessage() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                const message = {
+                    type: 'test',
+                    message: 'Test message from browser',
+                    timestamp: new Date().toISOString()
+                };
+                ws.send(JSON.stringify(message));
+                addLog('📤 Sent test message');
+            } else {
+                addLog('❌ WebSocket not connected');
+            }
+        }
+
+        function sendCustomMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            if (message && ws && ws.readyState === WebSocket.OPEN) {
+                const data = {
+                    type: 'custom',
+                    message: message,
+                    timestamp: new Date().toISOString()
+                };
+                ws.send(JSON.stringify(data));
+                addLog(`📤 Sent: ${message}`);
+                input.value = '';
+            } else if (!message) {
+                addLog('❌ Please enter a message');
+            } else {
+                addLog('❌ WebSocket not connected');
+            }
+        }
+
+        function connectToPeer() {
+            peerHost = prompt('Enter peer IP address (e.g., 192.168.1.100):');
+            if (peerHost) {
+                addLog(`🔌 Attempting to connect to peer: ${peerHost}`);
+                addLog('ℹ️ Peer connection will be implemented in Phase 1 completion');
+            }
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                addLog('🔌 Manually disconnected');
+            }
+        }
+
+        // Auto-connect on page load
+        window.onload = function() {
+            connect();
+        };
+    </script>
 </body>
 </html>
