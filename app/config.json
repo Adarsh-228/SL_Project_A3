@@ -10,7 +10,7 @@
     "auto_discover": true
   },
   "gestures": {
-    "copy_gesture": "peace_sign",
+    "copy_gesture": "fist",
     "paste_gesture": "open_hand",
     "sensitivity": 0.7,
     "hold_duration": 1.0

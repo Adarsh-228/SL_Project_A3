@@ -17,10 +17,15 @@ gesture-sync/
 └── README.md                  ← This file
 ```
 
-## 🚀 Phase 1: WebSocket Connectivity
+## 🚀 Phase 1: WebSocket Connectivity ✅ COMPLETED
 
 ### Goal
 Ensure both PCs can communicate over WebSocket with bi-directional messaging.
+
+## 🎥 Phase 2: OpenCV Camera Feed
+
+### Goal
+Test webcam capture and display video feed in browser with smooth frame rate.
 
 ### Setup
 
@@ -29,44 +34,45 @@ Ensure both PCs can communicate over WebSocket with bi-directional messaging.
    pip install -r requirements.txt
    ```
 
-2. **Start server on PC-A:**
+2. **Start server on both PCs:**
    ```bash
-   python app/main.py
+   python -m app.main
    ```
 
-3. **Start server on PC-B:**
-   ```bash
-   python app/main.py
-   ```
-
-4. **Open browser on both PCs:**
+3. **Open browser on both PCs:**
    ```
    http://localhost:8000
    ```
 
 ### Testing
 
-1. **Test local WebSocket:**
+1. **Test camera feed:**
+   - Verify camera feed displays in browser
+   - Check frame rate is smooth and consistent
+   - Test "Toggle Camera" and "Test Camera" buttons
+
+2. **Test WebSocket (still works):**
    - Click "Send Test Message" on both PCs
    - Verify messages appear in logs
 
-2. **Test peer connection:**
+3. **Test peer connection:**
    - On PC-B, click "Connect to Peer"
    - Enter PC-A's IP address
    - Send messages between PCs
 
 ### Success Criteria
 
-- ✅ Both PCs can start WebSocket servers
-- ✅ Both PCs can connect as clients to each other
-- ✅ Messages can be sent PC-A → PC-B
-- ✅ Messages can be sent PC-B → PC-A
-- ✅ Both PCs receive and display messages
+- ✅ Camera opens and displays video feed
+- ✅ Frame rate is smooth and consistent
+- ✅ Video feed shows in browser
+- ✅ WebSocket communication still works
+- ✅ Both PCs can communicate with camera active
 
 ## 🔄 Next Phases
 
-- **Phase 2:** OpenCV Camera Feed
 - **Phase 3:** MediaPipe Gesture Detection
+  - ✊ **Fist** = Copy gesture
+  - ✋ **Open hand** = Paste gesture
 - **Phase 4:** Clipboard Actions Integration
 - **Phase 5:** Complete Gesture + WebSocket + Clipboard System
 

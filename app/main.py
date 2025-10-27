@@ -1,13 +1,14 @@
 """
-Phase 1: Main Entry Point
-Combines server and client functionality
+Phase 2: OpenCV Camera Feed
+Test webcam capture and display video feed
 """
+import cv2
 import asyncio
 import json
 import logging
 from datetime import datetime
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.templating import Jinja2Templates
 import uvicorn
 import websockets
@@ -17,7 +18,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
-app = FastAPI(title="Gesture Sync - Phase 1", version="1.0.0")
+app = FastAPI(title="Gesture Sync - Phase 2", version="2.0.0")
 
 # Setup templates
 templates = Jinja2Templates(directory="templates")
@@ -32,11 +33,11 @@ class ConnectionManager:
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info(f"✅ Client connected. Total clients: {len(self.active_connections)}")
+        logger.info(f"SUCCESS: Client connected. Total clients: {len(self.active_connections)}")
 
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
-        logger.info(f"🔌 Client disconnected. Total clients: {len(self.active_connections)}")
+        logger.info(f"DISCONNECTED: Client disconnected. Total clients: {len(self.active_connections)}")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
@@ -47,18 +48,109 @@ class ConnectionManager:
                 try:
                     await connection.send_text(message)
                 except Exception as e:
-                    logger.error(f"❌ Error broadcasting to client: {e}")
+                    logger.error(f"ERROR: Error broadcasting to client: {e}")
 
 manager = ConnectionManager()
 
+# Global camera capture
+camera = None
+
+def get_camera():
+    """Get camera instance"""
+    global camera
+    if camera is None:
+        try:
+            camera = cv2.VideoCapture(0)
+            # Set camera properties for better performance
+            camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            camera.set(cv2.CAP_PROP_FPS, 30)
+            
+            if not camera.isOpened():
+                logger.error("ERROR: Could not open camera")
+                return None
+            
+            # Test if we can actually read a frame
+            ret, test_frame = camera.read()
+            if not ret or test_frame is None:
+                logger.error("ERROR: Camera opened but cannot read frames")
+                camera.release()
+                camera = None
+                return None
+                
+            logger.info("SUCCESS: Camera opened and tested successfully")
+        except Exception as e:
+            logger.error(f"ERROR: Camera initialization error: {e}")
+            if camera:
+                camera.release()
+                camera = None
+            return None
+    return camera
+
+def generate_frames():
+    """Generate video frames for streaming"""
+    cap = get_camera()
+    if cap is None:
+        logger.error("ERROR: Cannot generate frames - camera not available")
+        return
+    
+    frame_count = 0
+    consecutive_failures = 0
+    max_consecutive_failures = 10
+    
+    while True:
+        try:
+            ret, frame = cap.read()
+            if not ret or frame is None:
+                consecutive_failures += 1
+                logger.warning(f"WARNING: Failed to read frame (attempt {consecutive_failures})")
+                
+                if consecutive_failures >= max_consecutive_failures:
+                    logger.error("ERROR: Too many consecutive frame failures, stopping stream")
+                    break
+                continue
+            
+            # Reset failure counter on successful read
+            consecutive_failures = 0
+            frame_count += 1
+            
+            # Flip frame horizontally for mirror effect
+            frame = cv2.flip(frame, 1)
+            
+            # Add timestamp overlay
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cv2.putText(frame, f"Phase 2 - Camera Feed", (10, 30), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.putText(frame, timestamp, (10, 70), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            cv2.putText(frame, f"Frame: {frame_count}", (10, 110), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+            
+            # Encode frame as JPEG
+            (flag, encodedImage) = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            if not flag:
+                logger.warning("WARNING: Failed to encode frame as JPEG")
+                continue
+            
+            # Yield frame
+            yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + 
+                   bytearray(encodedImage) + b'\r\n')
+                   
+        except Exception as e:
+            logger.error(f"ERROR: Error in frame generation: {e}")
+            consecutive_failures += 1
+            if consecutive_failures >= max_consecutive_failures:
+                break
+            continue
+
 @app.get("/", response_class=HTMLResponse)
 async def get_status():
-    """Main status page"""
+    """Main status page with camera feed"""
     return """
     <!DOCTYPE html>
     <html>
     <head>
-        <title>Gesture Sync - Phase 1</title>
+        <title>Gesture Sync - Phase 2</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 40px; background: #f0f0f0; }
             .container { background: white; padding: 30px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
@@ -71,20 +163,31 @@ async def get_status():
             .btn-success { background: #28a745; color: white; }
             .btn-danger { background: #dc3545; color: white; }
             .phase-info { background: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0; }
+            .camera-container { text-align: center; margin: 20px 0; }
+            .camera-feed { border: 2px solid #007bff; border-radius: 10px; max-width: 640px; }
         </style>
     </head>
     <body>
         <div class="container">
-            <h1>🎯 Gesture Sync - Phase 1</h1>
+            <h1>🎯 Gesture Sync - Phase 2</h1>
             
             <div class="phase-info">
-                <h3>Phase 1: WebSocket Connectivity</h3>
-                <p><strong>Goal:</strong> Ensure both PCs can communicate over WebSocket</p>
-                <p><strong>Status:</strong> Server running, waiting for connections</p>
+                <h3>Phase 2: OpenCV Camera Feed</h3>
+                <p><strong>Goal:</strong> Test webcam capture and display video feed</p>
+                <p><strong>Status:</strong> Camera feed integration</p>
             </div>
             
             <div id="status" class="status disconnected">
-                Server Running - Waiting for connections
+                Server Running - Camera Feed Active
+            </div>
+            
+            <div class="camera-container">
+                <h3>📹 Live Camera Feed</h3>
+                <img id="cameraFeed" class="camera-feed" src="/video_feed" alt="Camera Feed">
+                <div>
+                    <button class="btn-primary" onclick="toggleCamera()">Toggle Camera</button>
+                    <button class="btn-success" onclick="testCamera()">Test Camera</button>
+                </div>
             </div>
             
             <div>
@@ -96,24 +199,22 @@ async def get_status():
             <h3>Connection Log</h3>
             <div id="log" class="log"></div>
             
-            <h3>Manual Test</h3>
-            <input type="text" id="messageInput" placeholder="Enter test message" style="width: 300px; padding: 8px;">
-            <button class="btn-primary" onclick="sendCustomMessage()">Send</button>
-            
             <div class="phase-info">
-                <h4>Next Steps:</h4>
-                <ol>
-                    <li>Start this server on both PCs</li>
-                    <li>Use "Connect to Peer" to connect PC-B to PC-A</li>
-                    <li>Test bi-directional messaging</li>
-                    <li>Move to Phase 2 (Camera feed)</li>
-                </ol>
+                <h4>Phase 2 Success Criteria:</h4>
+                <ul>
+                    <li>✅ Camera opens and displays video feed</li>
+                    <li>✅ Frame rate is smooth and consistent</li>
+                    <li>✅ Video feed shows in browser</li>
+                    <li>✅ WebSocket communication still works</li>
+                </ul>
+                <h4>Next: Phase 3 - MediaPipe Gesture Detection</h4>
             </div>
         </div>
 
         <script>
             let ws = null;
             let peerHost = null;
+            let cameraActive = true;
 
             function connect() {
                 const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -158,7 +259,7 @@ async def get_status():
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     const message = {
                         type: 'test',
-                        message: 'Test message from browser',
+                        message: 'Test message from Phase 2',
                         timestamp: new Date().toISOString()
                     };
                     ws.send(JSON.stringify(message));
@@ -168,30 +269,34 @@ async def get_status():
                 }
             }
 
-            function sendCustomMessage() {
-                const input = document.getElementById('messageInput');
-                const message = input.value.trim();
-                if (message && ws && ws.readyState === WebSocket.OPEN) {
-                    const data = {
-                        type: 'custom',
-                        message: message,
-                        timestamp: new Date().toISOString()
-                    };
-                    ws.send(JSON.stringify(data));
-                    addLog(`📤 Sent: ${message}`);
-                    input.value = '';
-                } else if (!message) {
-                    addLog('❌ Please enter a message');
+            function toggleCamera() {
+                cameraActive = !cameraActive;
+                const feed = document.getElementById('cameraFeed');
+                if (cameraActive) {
+                    feed.src = '/video_feed';
+                    addLog('📹 Camera feed enabled');
                 } else {
-                    addLog('❌ WebSocket not connected');
+                    feed.src = '';
+                    addLog('📹 Camera feed disabled');
                 }
             }
 
+            function testCamera() {
+                const feed = document.getElementById('cameraFeed');
+                feed.onload = function() {
+                    addLog('✅ Camera feed loaded successfully');
+                };
+                feed.onerror = function() {
+                    addLog('❌ Camera feed failed to load');
+                };
+                addLog('🧪 Testing camera feed...');
+            }
+
             function connectToPeer() {
-                peerHost = prompt('Enter peer IP address (e.g., 192.168.1.100):');
+                peerHost = prompt('Enter peer IP address (e.g., 10.196.92.156):');
                 if (peerHost) {
                     addLog(`🔌 Attempting to connect to peer: ${peerHost}`);
-                    addLog('ℹ️ Peer connection will be implemented in Phase 1 completion');
+                    addLog('ℹ️ Peer connection for Phase 2');
                 }
             }
 
@@ -205,11 +310,29 @@ async def get_status():
             // Auto-connect on page load
             window.onload = function() {
                 connect();
+                addLog('🎥 Phase 2: Camera feed integration');
             };
         </script>
     </body>
     </html>
     """
+
+@app.get("/video_feed")
+async def video_feed():
+    """Video streaming route"""
+    try:
+        return StreamingResponse(
+            generate_frames(),
+            media_type="multipart/x-mixed-replace; boundary=frame",
+            headers={
+                "Cache-Control": "no-cache, no-store, must-revalidate",
+                "Pragma": "no-cache",
+                "Expires": "0"
+            }
+        )
+    except Exception as e:
+        logger.error(f"ERROR: Video feed error: {e}")
+        return {"error": "Video feed unavailable", "details": str(e)}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -222,7 +345,7 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             message = json.loads(data)
             
-            logger.info(f"📨 Received: {message}")
+            logger.info(f"RECEIVED: {message}")
             
             # Echo message back to sender
             response = {
@@ -230,7 +353,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "message": f"Echo: {message.get('message', 'No message')}",
                 "original": message,
                 "timestamp": datetime.now().isoformat(),
-                "server": "Phase 1 Server"
+                "server": "Phase 2 Server"
             }
             await manager.send_personal_message(json.dumps(response), websocket)
             
@@ -246,27 +369,55 @@ async def websocket_endpoint(websocket: WebSocket):
             
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        logger.info("🔌 Client disconnected")
+        logger.info("DISCONNECTED: Client disconnected")
     except Exception as e:
-        logger.error(f"❌ WebSocket error: {e}")
+        logger.error(f"ERROR: WebSocket error: {e}")
         manager.disconnect(websocket)
 
 @app.get("/api/status")
 async def get_server_status():
     """API endpoint to check server status"""
+    camera_status = "active" if get_camera() is not None else "inactive"
     return {
         "status": "running",
         "connected_clients": len(manager.active_connections),
-        "phase": "Phase 1 - WebSocket Server",
+        "phase": "Phase 2 - Camera Feed",
+        "camera_status": camera_status,
         "timestamp": datetime.now().isoformat()
     }
 
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup on shutdown"""
+    global camera
+    if camera is not None:
+        camera.release()
+        logger.info("Camera released on shutdown")
+
 if __name__ == "__main__":
-    print("🎯 Gesture Sync - Phase 1: WebSocket Server")
+    import socket
+    
+    # Get local IP address
+    def get_local_ip():
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
+            return ip
+        except:
+            return "127.0.0.1"
+    
+    local_ip = get_local_ip()
+    
+    print("🎯 Gesture Sync - Phase 2: Camera Feed")
     print("=" * 50)
-    print("Starting FastAPI WebSocket server...")
-    print("Open browser to: http://localhost:8000")
+    print("Starting FastAPI server with camera integration...")
+    print(f"Open browser to: http://localhost:8000")
+    print(f"Or use local IP: http://{local_ip}:8000")
     print("WebSocket endpoint: ws://localhost:8000/ws")
+    print("Camera feed: http://localhost:8000/video_feed")
+    print("Command: python -m app.main")
     print("Press Ctrl+C to stop")
     print("-" * 50)
     
