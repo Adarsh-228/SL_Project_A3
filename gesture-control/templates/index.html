@@ -1,114 +1,16 @@
-{% extends "base.html" %}
 
-{% block title %}Peer Messaging - Home{% endblock %}
-
-{% block content %}
-<div class="row">
-    <div class="col-lg-6 mb-4">
-        <div class="card">
-            <div class="card-header bg-primary text-white">
-                <h5 class="mb-0"><i class="fas fa-plug me-2"></i>Connect to Peer</h5>
-            </div>
-            <div class="card-body">
-                <div class="input-group mb-3">
-                    <span class="input-group-text">IPv4</span>
-                    <input type="text" id="peerIp" class="form-control" placeholder="e.g. 192.168.1.10">
-                    <button class="btn btn-gesture" id="connectBtn"><i class="fas fa-link me-2"></i>Connect</button>
-                </div>
-                <small class="text-muted">Both systems must run this app. Enter the other system's IPv4 and connect.</small>
-                <div class="mt-2"><span class="badge bg-secondary" id="wsStatus">Disconnected</span></div>
-            </div>
-        </div>
-    </div>
-    <div class="col-lg-6 mb-4">
-        <div class="card">
-            <div class="card-header bg-success text-white">
-                <h5 class="mb-0"><i class="fas fa-comments me-2"></i>Chat</h5>
-            </div>
-            <div class="card-body">
-                <div id="chatLog" style="height: 260px; overflow-y: auto; background: #f8f9fa; border-radius: 8px; padding: 10px;"></div>
-                <div class="input-group mt-3">
-                    <input type="text" id="chatInput" class="form-control" placeholder="Type a message" disabled>
-                    <button class="btn btn-primary" id="sendBtn" disabled>Send</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-    let ws = null;
-
-    function logMessage(text, type) {
-        const el = document.createElement('div');
-        if (type === 'system') {
-            el.className = 'text-center';
-            el.innerHTML = `<span class="badge bg-info">System</span> <span class="ms-2 text-muted">${text}</span>`;
-            } else {
-            el.className = type === 'out' ? 'text-end' : 'text-start';
-            el.innerHTML = `<span class="badge ${type === 'out' ? 'bg-primary' : 'bg-secondary'}">${type === 'out' ? 'You' : 'Peer'}</span> <span class="ms-2">${text}</span>`;
-        }
-        const log = document.getElementById('chatLog');
-        log.appendChild(el);
-        log.scrollTop = log.scrollHeight;
-    }
-
-    function connectTo(ip) {
-        try {
-            ws = new WebSocket(`ws://${ip}:8000/ws`);
-        } catch (e) {
-            logMessage('Invalid IP or connection error', 'in');
-            return;
-        }
-        const status = document.getElementById('wsStatus');
-        ws.onopen = () => {
-            status.className = 'badge bg-success';
-            status.textContent = `Connected to ${ip}`;
-            document.getElementById('chatInput').disabled = false;
-            document.getElementById('sendBtn').disabled = false;
-            logMessage(`Connected to peer at ${ip}`, 'system');
-        };
-        ws.onmessage = (evt) => {
-            try {
-                const data = JSON.parse(evt.data);
-                if (data.message) logMessage(data.message, 'in');
-            } catch {
-                logMessage(evt.data, 'in');
-            }
-        };
-        ws.onclose = () => {
-            status.className = 'badge bg-secondary';
-            status.textContent = 'Disconnected';
-            document.getElementById('chatInput').disabled = true;
-            document.getElementById('sendBtn').disabled = true;
-        };
-        ws.onerror = () => {
-            status.className = 'badge bg-danger';
-            status.textContent = 'Error';
-        };
-    }
-
-    document.getElementById('connectBtn').addEventListener('click', () => {
-        const ip = document.getElementById('peerIp').value.trim();
-        if (!ip) return;
-        connectTo(ip);
-    });
-
-    document.getElementById('sendBtn').addEventListener('click', () => {
-        const input = document.getElementById('chatInput');
-        const text = input.value.trim();
-        if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
-        ws.send(text);
-        logMessage(text, 'out');
-        input.value = '';
-    });
-
-    document.getElementById('chatInput').addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            document.getElementById('sendBtn').click();
-        }
-    });
-</script>
-{% endblock %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Traffic Visualizer</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <h1>Network Traffic Visualizer</h1>
+    <canvas id="protocolChart"></canvas>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
