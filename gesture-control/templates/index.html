@@ -43,8 +43,13 @@
 
     function logMessage(text, type) {
         const el = document.createElement('div');
-        el.className = type === 'out' ? 'text-end' : 'text-start';
-        el.innerHTML = `<span class="badge ${type === 'out' ? 'bg-primary' : 'bg-secondary'}">${type === 'out' ? 'You' : 'Peer'}</span> <span class="ms-2">${text}</span>`;
+        if (type === 'system') {
+            el.className = 'text-center';
+            el.innerHTML = `<span class="badge bg-info">System</span> <span class="ms-2 text-muted">${text}</span>`;
+            } else {
+            el.className = type === 'out' ? 'text-end' : 'text-start';
+            el.innerHTML = `<span class="badge ${type === 'out' ? 'bg-primary' : 'bg-secondary'}">${type === 'out' ? 'You' : 'Peer'}</span> <span class="ms-2">${text}</span>`;
+        }
         const log = document.getElementById('chatLog');
         log.appendChild(el);
         log.scrollTop = log.scrollHeight;
@@ -60,9 +65,10 @@
         const status = document.getElementById('wsStatus');
         ws.onopen = () => {
             status.className = 'badge bg-success';
-            status.textContent = 'Connected';
+            status.textContent = `Connected to ${ip}`;
             document.getElementById('chatInput').disabled = false;
             document.getElementById('sendBtn').disabled = false;
+            logMessage(`Connected to peer at ${ip}`, 'system');
         };
         ws.onmessage = (evt) => {
             try {

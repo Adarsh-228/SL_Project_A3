@@ -171,7 +171,7 @@
             }
         }
 
-        // Check connection status
+        // Check connection status (HTTP only, no WebSocket)
         function checkConnection() {
             fetch('/api/status')
                 .then(response => response.json())
@@ -183,8 +183,8 @@
                 });
         }
 
-        // Check status every 5 seconds
-        setInterval(checkConnection, 5000);
+        // Check status every 10 seconds (less frequent)
+        setInterval(checkConnection, 10000);
         checkConnection(); // Initial check
     </script>
     
